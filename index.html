@@ -1,0 +1,344 @@
+<title>フォロー検索URLメーカー</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one narrow working column. Input on top, conditions in the middle, generated results last. */
+:root {
+  --bg: #f3f5f7;
+  --surface: #ffffff;
+  --fg: #1c242b;
+  --muted: #5d6b77;
+  --line: #d5dce2;
+  --accent: #0b6e8a;
+  --accent-fg: #ffffff;
+  --accent-soft: #e0f0f5;
+  --ok: #1d7a4a;
+  --font-body: "Zen Kaku Gothic New", "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12181d; --surface: #1a232a; --fg: #e6ecf0; --muted: #93a2ae;
+    --line: #2d3a44; --accent: #5cc3df; --accent-fg: #0a1a20; --accent-soft: #17323b; --ok: #6bd49a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12181d; --surface: #1a232a; --fg: #e6ecf0; --muted: #93a2ae;
+  --line: #2d3a44; --accent: #5cc3df; --accent-fg: #0a1a20; --accent-soft: #17323b; --ok: #6bd49a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--font-body); font-size: 15px; line-height: 1.7;
+  padding-inline: 16px; padding-block: 24px 48px;
+}
+main { max-width: 720px; margin-inline: auto; display: flex; flex-direction: column; gap: 20px; }
+h1 { font-size: 1.5rem; line-height: 1.3; margin: 0; text-wrap: balance; }
+h2 { font-size: 1rem; margin: 0; letter-spacing: .04em; }
+p { margin: 0; }
+.lead { color: var(--muted); }
+section { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+textarea {
+  width: 100%; min-height: 150px; resize: vertical;
+  font-family: var(--font-mono); font-size: 13px; line-height: 1.6;
+  background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 4px; padding: 10px;
+}
+textarea.out { min-height: 84px; word-break: break-all; }
+select, input[type="number"] {
+  font: inherit; background: var(--bg); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; min-width: 0; width: 100%;
+}
+label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); min-width: 0; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+button, .btn {
+  font: inherit; font-size: 14px; cursor: pointer; text-decoration: none; text-align: center;
+  background: var(--surface); color: var(--fg); border: 1px solid var(--line); border-radius: 4px; padding: 6px 12px;
+}
+button.primary, .btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+button:focus-visible, .btn:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.status { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; color: var(--muted); }
+.status b { color: var(--fg); font-variant-numeric: tabular-nums; }
+.pill { display: inline-block; font-size: 12px; background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 0 10px; }
+.chunks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.chunk { border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; }
+.chunk .meta { min-width: 0; display: flex; flex-direction: column; }
+.chunk .meta small { color: var(--muted); font-family: var(--font-mono); font-size: 12px; overflow-wrap: anywhere; }
+.chunk .acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.empty { color: var(--muted); font-size: 14px; padding: 8px 0; }
+details { font-size: 14px; }
+summary { cursor: pointer; font-weight: 500; }
+details ol, details ul { margin: 8px 0 0; padding-left: 1.4em; display: flex; flex-direction: column; gap: 4px; }
+code { font-family: var(--font-mono); font-size: 12.5px; background: var(--bg); border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; overflow-wrap: anywhere; }
+.note { font-size: 13px; color: var(--muted); }
+.copied { color: var(--ok); font-size: 13px; min-height: 1.4em; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<main>
+  <header style="display:flex;flex-direction:column;gap:6px">
+    <h1>フォロー検索URLメーカー</h1>
+    <p class="lead">フォロー中サークルのRGコードをまとめて、DLsiteのOR検索用URLを作ります。</p>
+  </header>
+
+  <section aria-labelledby="h-in">
+    <h2 id="h-in">入力</h2>
+    <p class="note">フォローリストを保存したHTML、サークルページのURL一覧、RGコードのどれでも貼り付けられます。RGコードを自動で拾います。</p>
+    <textarea id="src" spellcheck="false" aria-label="フォローリストのHTML、URL、またはRGコード"></textarea>
+    <div class="row">
+      <label for="file" style="flex-direction:row;align-items:center;gap:8px">保存したHTML/MHTMLを読み込む
+        <input id="file" type="file" multiple accept=".html,.htm,.mhtml,.mht,.txt,text/html,text/plain,message/rfc822,multipart/related">
+      </label>
+      <button id="clear" type="button">入力を消す</button>
+    </div>
+    <p class="note" id="loaded" aria-live="polite"></p>
+    <details>
+      <summary>フォローリストのHTMLを保存する手順</summary>
+      <ol>
+        <li>DLsiteのフォローリストのページを開き、Ctrl+S(Macは Cmd+S)で保存します。形式は「HTMLのみ」でも「MHTML(.mhtml)」でも読み込めます。</li>
+        <li>上の「保存したHTML/MHTMLを読み込む」からそのファイルを選びます。</li>
+        <li>フォローリストが複数ページに分かれている場合は、各ページを保存して、ファイルをまとめて選んでください(Ctrl/Shiftを押しながら選択、またはフォルダ内を全選択)。HTMLとMHTMLが混ざっていても構いません。</li>
+        <li>読み込んだファイルからはRGコードだけが入力欄に追加されます。重複は自動で除かれます。</li>
+      </ol>
+    </details>
+  </section>
+
+  <section aria-labelledby="h-opt">
+    <h2 id="h-opt">検索条件</h2>
+    <div class="grid">
+      <label for="site">ストア
+        <select id="site">
+          <option value="maniax">同人(maniax)</option>
+          <option value="girls">女性向け(girls)</option>
+          <option value="home">全年齢(home)</option>
+        </select>
+      </label>
+      <label for="order">並び順
+        <select id="order">
+          <option value="release_d">発売日が新しい順</option>
+          <option value="trend">人気順</option>
+          <option value="dl_d">DL数が多い順</option>
+        </select>
+      </label>
+      <label for="per">1ページの件数
+        <select id="per">
+          <option value="30">30件</option>
+          <option value="50">50件</option>
+          <option value="100">100件</option>
+        </select>
+      </label>
+      <label for="chunk">1URLあたりのサークル数
+        <input id="chunk" type="number" min="1" max="200" value="30" inputmode="numeric">
+      </label>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-out">
+    <h2 id="h-out">結果</h2>
+    <div class="status" id="status" aria-live="polite"></div>
+    <label for="joined">OR検索用の文字列(RG…|RG…)
+      <textarea id="joined" class="out" readonly></textarea>
+    </label>
+    <div class="row">
+      <button id="copyJoined" class="primary" type="button">文字列をコピー</button>
+      <span class="copied" id="copiedMsg" aria-live="polite"></span>
+    </div>
+    <h2 style="margin-top:8px">検索URL</h2>
+    <ul class="chunks" id="chunks"></ul>
+  </section>
+
+  <p class="note">URLの形式はDLsiteの検索の仕様に基づく想定で、開いて結果が出ない場合はDLsite側の仕様変更の可能性があります。その場合は上の文字列をコピーして、DLsiteの検索バー(検索後に左に出る欄は文字数制限が緩い)に貼り付けてください。検索条件の保存は、DLsiteの「こだわり条件」から検索してから行います。</p>
+</main>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var SAMPLE = [
+    "<!-- 入力例です。消して自分のデータを貼り付けてください -->",
+    "https://www.dlsite.com/maniax/circle/profile/=/maker_id/RG22701.html",
+    "https://www.dlsite.com/maniax/circle/profile/=/maker_id/RG54523.html",
+    "https://www.dlsite.com/maniax/circle/profile/=/maker_id/RG31749.html"
+  ].join("\n");
+  var KEY = "follow-search-url-v1";
+
+  function load() { try { return JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) { return null; } }
+  function save(o) { try { localStorage.setItem(KEY, JSON.stringify(o)); } catch (e) {} }
+
+  function qpDecode(s) {
+    return s.replace(/=\r?\n/g, "").replace(/=([0-9A-Fa-f]{2})/g, function (_, h) { return String.fromCharCode(parseInt(h, 16)); });
+  }
+  // MHTML(.mhtml/.mht)は複数パートのMIME形式。テキストのパートだけデコードして連結する。
+  function decodeMhtml(text) {
+    var head = text.slice(0, 4000);
+    if (!/MIME-Version:/i.test(head) && !/multipart\/related/i.test(head)) return text;
+    var bm = /boundary="?([^"\r\n;]+)"?/i.exec(head);
+    var parts = bm ? text.split("--" + bm[1]) : [text];
+    var out = [];
+    parts.forEach(function (p) {
+      var sep = p.search(/\r?\n\r?\n/);
+      if (sep < 0) return;
+      var h = p.slice(0, sep), body = p.slice(sep).replace(/^\s+/, "");
+      if (!/Content-Type:\s*text\//i.test(h)) return;
+      var m = /Content-Transfer-Encoding:\s*([\w-]+)/i.exec(h);
+      var enc = m ? m[1].toLowerCase() : "";
+      if (enc === "quoted-printable") body = qpDecode(body);
+      else if (enc === "base64") { try { body = atob(body.replace(/\s+/g, "")); } catch (e) { return; } }
+      out.push(body);
+    });
+    return out.length ? out.join("\n") : text;
+  }
+
+  function extract(text) {
+    var seen = {}, out = [], mode = "";
+    var re1 = /(RG\d{5,10})(?!\d)\.html/gi, m;
+    while ((m = re1.exec(text))) add(m[1]);
+    if (out.length) mode = "サークルページのURL";
+    else {
+      var re2 = /(?<![A-Za-z])(RG\d{5,10})(?!\d)/gi;
+      while ((m = re2.exec(text))) add(m[1]);
+      if (out.length) mode = "RGコード";
+    }
+    function add(id) { id = id.toUpperCase(); if (!seen[id]) { seen[id] = 1; out.push(id); } }
+    return { ids: out, mode: mode };
+  }
+
+  function buildUrl(ids) {
+    var kw = encodeURIComponent(ids.join("|"));
+    return "https://www.dlsite.com/" + $("site").value + "/fsr/=/language/jp/keyword/" + kw +
+      "/order%5B0%5D/" + $("order").value + "/per_page/" + $("per").value;
+  }
+
+  function copyText(text, onOk, fallbackEl) {
+    function fb() {
+      var el = fallbackEl;
+      var tmp = null;
+      if (!el) { tmp = document.createElement("textarea"); tmp.value = text; tmp.style.position = "fixed"; tmp.style.opacity = "0"; document.body.appendChild(tmp); el = tmp; }
+      el.focus(); el.select();
+      var ok = false;
+      try { ok = document.execCommand("copy"); } catch (e) {}
+      if (tmp) document.body.removeChild(tmp);
+      onOk(ok ? "コピーしました" : "選択しました。手動でコピーしてください");
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { onOk("コピーしました"); }, fb);
+    } else fb();
+  }
+
+  var msgTimer;
+  function flash(msg) {
+    $("copiedMsg").textContent = msg;
+    clearTimeout(msgTimer);
+    msgTimer = setTimeout(function () { $("copiedMsg").textContent = ""; }, 2500);
+  }
+
+  function render() {
+    var res = extract($("src").value);
+    var ids = res.ids;
+    var size = Math.max(1, Math.min(200, parseInt($("chunk").value, 10) || 30));
+    var joined = ids.join("|");
+    $("joined").value = joined;
+
+    var st = $("status");
+    st.textContent = "";
+    function stat(label, value) {
+      var s = document.createElement("span");
+      s.appendChild(document.createTextNode(label + " "));
+      var b = document.createElement("b"); b.textContent = value; s.appendChild(b);
+      st.appendChild(s);
+    }
+    stat("サークル", ids.length + "件");
+    stat("文字数", joined.length + "字");
+    stat("URL", (ids.length ? Math.ceil(ids.length / size) : 0) + "本");
+    if (res.mode) { var p = document.createElement("span"); p.className = "pill"; p.textContent = res.mode + "から抽出"; st.appendChild(p); }
+
+    var ul = $("chunks");
+    ul.textContent = "";
+    if (!ids.length) {
+      var li = document.createElement("li");
+      li.className = "empty";
+      li.textContent = "RGコードが見つかりません。サークルページのURLかHTMLを貼り付けてください。";
+      ul.appendChild(li);
+      save({ src: $("src").value });
+      return;
+    }
+    var n = 0;
+    for (var i = 0; i < ids.length; i += size) {
+      n++;
+      var part = ids.slice(i, i + size);
+      var url = buildUrl(part);
+      var li2 = document.createElement("li");
+      li2.className = "chunk";
+      var meta = document.createElement("div"); meta.className = "meta";
+      var t = document.createElement("span");
+      t.textContent = "検索 " + n + "(" + part.length + "サークル)";
+      var sm = document.createElement("small");
+      sm.textContent = part[0] + (part.length > 1 ? " 〜 " + part[part.length - 1] : "");
+      meta.appendChild(t); meta.appendChild(sm);
+      var acts = document.createElement("div"); acts.className = "acts";
+      var a = document.createElement("a");
+      a.className = "btn primary"; a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer"; a.textContent = "DLsiteで開く";
+      var cb = document.createElement("button");
+      cb.type = "button"; cb.textContent = "URLをコピー";
+      (function (u, btn) {
+        btn.addEventListener("click", function () {
+          copyText(u, function (m) { btn.textContent = m.indexOf("コピーしました") === 0 ? "コピー済み" : "手動でコピー"; setTimeout(function () { btn.textContent = "URLをコピー"; }, 2000); });
+        });
+      })(url, cb);
+      acts.appendChild(a); acts.appendChild(cb);
+      li2.appendChild(meta); li2.appendChild(acts);
+      ul.appendChild(li2);
+    }
+    save({ src: $("src").value, site: $("site").value, order: $("order").value, per: $("per").value, chunk: $("chunk").value });
+  }
+
+  var saved = load();
+  $("src").value = saved && typeof saved.src === "string" ? saved.src : SAMPLE;
+  if (saved) {
+    if (saved.site) $("site").value = saved.site;
+    if (saved.order) $("order").value = saved.order;
+    if (saved.per) $("per").value = saved.per;
+    if (saved.chunk) $("chunk").value = saved.chunk;
+  }
+
+  ["src", "site", "order", "per", "chunk"].forEach(function (id) {
+    $(id).addEventListener("input", render);
+    $(id).addEventListener("change", render);
+  });
+  $("clear").addEventListener("click", function () { $("src").value = ""; render(); $("src").focus(); });
+  $("copyJoined").addEventListener("click", function () { copyText($("joined").value, flash, $("joined")); });
+  function readOne(f) {
+    return new Promise(function (resolve) {
+      var r = new FileReader();
+      r.onload = function () {
+        var body = String(r.result || "");
+        if (/\.(mhtml|mht)$/i.test(f.name) || /^\s*(From:|MIME-Version:|Content-Type:\s*multipart)/i.test(body.slice(0, 600))) body = decodeMhtml(body);
+        resolve({ name: f.name, ids: extract(body).ids });
+      };
+      r.onerror = function () { resolve({ name: f.name, ids: [], error: true }); };
+      r.readAsText(f);
+    });
+  }
+  $("file").addEventListener("change", function (e) {
+    var input = e.target;
+    var files = Array.prototype.slice.call(input.files || []);
+    if (!files.length) return;
+    files.sort(function (a, b) { return a.name < b.name ? -1 : a.name > b.name ? 1 : 0; });
+    Promise.all(files.map(readOne)).then(function (results) {
+      var cur = $("src").value;
+      var isSample = cur.indexOf("入力例です") !== -1;
+      var before = extract(isSample ? "" : cur).ids.length;
+      var lines = [];
+      results.forEach(function (x) { lines = lines.concat(x.ids); });
+      $("src").value = (cur.trim() && !isSample ? cur.replace(/\s+$/, "") + "\n" : "") + lines.join("\n");
+      render();
+      var after = extract($("src").value).ids.length;
+      var detail = results.map(function (x) { return x.name + ": " + (x.error ? "読み込み失敗" : x.ids.length + "件"); }).join(" / ");
+      $("loaded").textContent = files.length + "ファイルを読み込み、新しく " + (after - before) + "件を追加しました(" + detail + ")";
+      input.value = "";
+    });
+  });
+
+  render();
+})();
+</script>
